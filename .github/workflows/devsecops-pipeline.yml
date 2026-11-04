@@ -89,6 +89,49 @@ jobs:
   # ==========================================
   # 4. DAST (DYNAMIC APPLICATION SECURITY TESTING)
   # ==========================================
+  build_and_sca:
+    name: Build, Unit Tests & SCA
+    needs: sast_and_secrets
+    runs-on: ubuntu-latest
+
+    # Service PostgreSQL provisionné automatiquement pour les tests
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: identity_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build and Run Tests
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/identity_db
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: password
+        run: mvn clean package -DskipTests=false
+
+      - name: Run Trivy FS (SCA on dependencies)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" \
+            aquasec/trivy:latest fs --severity HIGH,CRITICAL --exit-code 0 /src
   dast_testing:
     name: DAST with OWASP ZAP
     needs: docker_build_and_scan
@@ -115,3 +158,4 @@ jobs:
       - name: Teardown Services
         if: always()
         run: docker compose down -v
+     
