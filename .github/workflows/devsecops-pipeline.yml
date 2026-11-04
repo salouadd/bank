@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload SCA PDF
         if: always()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba811e # v4.6.1
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3 stable
         with:
           name: SCA-Dependencies-Report-PDF
           path: sca-dependencies-report.pdf
@@ -211,7 +211,7 @@ jobs:
 
       - name: Upload Container Scan PDF
         if: always()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba811e # v4.6.1
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3 stable
         with:
           name: Container-Security-Report-PDF
           path: container-security-report.pdf
@@ -252,7 +252,7 @@ jobs:
 
       - name: Upload DAST PDF
         if: always()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba811e # v4.6.1
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3 stable
         with:
           name: DAST-OWASP-ZAP-Report-PDF
           path: dast-owasp-zap-report.pdf
