@@ -1,0 +1,30 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: identity-service
+    security:
+      jwt:
+        # Clé secrète de 256 bits minimum encodée en hexadécimal/base64 pour l'algorithme HS256
+        secret-key: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+        expiration-ms: 900000 # 15 minutes (en millisecondes)
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/identity_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:123456789}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # Hibernate valide la cohérence du schéma mais ne le modifie pas
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+    flyway:
+      enabled: true
+      locations: classpath:db/migration
+
+
