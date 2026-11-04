@@ -19,8 +19,10 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN apk update && apk upgrade --no-cache
 # Création du dossier de stockage pour les pièces KYC
-RUN mkdir -p uploads/kyc
-RUN mkdir -p uploads/kyc && chown -R appuser:appgroup /app
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# 3. Création des répertoires applicatifs et assignation des droits
+RUN mkdir -p /app/uploads/kyc && chown -R appuser:appgroup /app
 # Récupération du livrable JAR compilé
 COPY --from=builder /build/target/*.jar app.jar
 USER appuser
