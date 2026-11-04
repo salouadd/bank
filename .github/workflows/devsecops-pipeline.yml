@@ -72,8 +72,14 @@ jobs:
 
       - name: Run Trivy FS (SCA on dependencies)
         run: |
-          docker run --rm -v "${{ github.workspace }}:/src" \
-            aquasec/trivy:latest fs --severity HIGH,CRITICAL --exit-code 0 /src
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            -v "${HOME}/.m2:/root/.m2" \
+            aquasec/trivy:latest fs \
+            --offline-scan \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            /src
 
   # ==========================================
   # 3. BUILD DOCKER & CONTAINER SCANNING
