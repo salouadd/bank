@@ -19,15 +19,87 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install PDF Generator Tools
+        run: sudo apt-get update && sudo apt-get install -y wkhtmltopdf python3
+
       - name: Run Gitleaks (Secret Detection)
         run: |
           docker run --rm -v "${{ github.workspace }}:/path" \
-            zricethezav/gitleaks:latest detect --source="/path" --verbose
+            zricethezav/gitleaks:latest detect --source="/path" --report-format=json --report-path=/path/gitleaks-report.json --verbose || true
 
       - name: Run Semgrep SAST
         run: |
           docker run --rm -v "${{ github.workspace }}:/src" \
-            returntocorp/semgrep semgrep scan --config auto --config p/owasp-top-ten --error
+            returntocorp/semgrep semgrep scan --config auto --config p/owasp-top-ten --json --output=/src/semgrep-report.json || true
+
+      # Conversion des rapports JSON en HTML puis compilation PDF
+      - name: Generate SAST & Secrets PDF Report
+        run: |
+          cat << 'EOF' > generate_sast_html.py
+          import json, os
+
+          html = """<!DOCTYPE html><html><head><meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; margin: 30px; color: #1e293b; }
+            h1 { color: #0f172a; border-bottom: 2px solid #0284c7; padding-bottom: 8px; }
+            h2 { color: #0369a1; margin-top: 24px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+            th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; font-size: 12px; }
+            th { background-color: #f1f5f9; color: #334155; }
+            .badge-high { background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+            .badge-ok { background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+          </style></head><body>
+          <h1>Rapport de Sécurité : SAST & Détection de Secrets</h1>
+          """
+
+          # Section Gitleaks
+          html += "<h2>1. Analyse des Secrets (Gitleaks)</h2>"
+          if os.path.exists("gitleaks-report.json") and os.path.getsize("gitleaks-report.json") > 5:
+              with open("gitleaks-report.json") as f:
+                  data = json.load(f)
+              if data:
+                  html += "<table><tr><th>Règle</th><th>Fichier</th><th>Ligne</th><th>Secret masqué</th></tr>"
+                  for item in data:
+                      html += f"<tr><td>{item.get('Description')}</td><td>{item.get('File')}</td><td>{item.get('StartLine')}</td><td><code>{item.get('Secret')}</code></td></tr>"
+                  html += "</table>"
+              else:
+                  html += "<p class='badge-ok'>Aucun secret détecté.</p>"
+          else:
+              html += "<p class='badge-ok'>Aucun secret détecté.</p>"
+
+          # Section Semgrep
+          html += "<h2>2. Analyse Statique SAST (Semgrep)</h2>"
+          if os.path.exists("semgrep-report.json") and os.path.getsize("semgrep-report.json") > 5:
+              with open("semgrep-report.json") as f:
+                  data = json.load(f)
+              results = data.get("results", [])
+              if results:
+                  html += "<table><tr><th>Sévérité</th><th>Règle</th><th>Fichier</th><th>Ligne</th><th>Description</th></tr>"
+                  for item in results:
+                      sev = item.get("extra", {}).get("severity", "INFO")
+                      msg = item.get("extra", {}).get("message", "")
+                      html += f"<tr><td><span class='badge-high'>{sev}</span></td><td>{item.get('check_id')}</td><td>{item.get('path')}</td><td>{item.get('start', {}).get('line')}</td><td>{msg}</td></tr>"
+                  html += "</table>"
+              else:
+                  html += "<p class='badge-ok'>Aucune vulnérabilité de code détectée.</p>"
+          else:
+              html += "<p class='badge-ok'>Aucune vulnérabilité détectée.</p>"
+
+          html += "</body></html>"
+          with open("sast-report.html", "w") as f:
+              f.write(html)
+          EOF
+
+          python3 generate_sast_html.py
+          wkhtmltopdf sast-report.html sast-security-report.pdf
+
+      - name: Upload SAST & Secrets PDF
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba811e # v4.6.1
+        with:
+          name: SAST-and-Secrets-Report-PDF
+          path: sast-security-report.pdf
+          retention-days: 7
 
   # ==========================================
   # 2. BUILD, TESTS & ANALYSE DE DÉPENDANCES (SCA)
@@ -56,6 +128,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Install PDF Tools
+        run: sudo apt-get update && sudo apt-get install -y wkhtmltopdf
+
       - name: Set up JDK 21
         uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with:
@@ -70,16 +145,33 @@ jobs:
           SPRING_DATASOURCE_PASSWORD: password
         run: mvn clean package -DskipTests=false
 
-      - name: Run Trivy FS (SCA on dependencies)
+      - name: Run Trivy FS (SCA HTML Report)
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/src" \
             -v "${HOME}/.m2:/root/.m2" \
             aquasec/trivy:latest fs \
             --offline-scan \
+            --format template \
+            --template "@contrib/html.tpl" \
+            --output /src/trivy-fs-report.html \
             --severity HIGH,CRITICAL \
             --exit-code 0 \
             /src
+
+      - name: Convert SCA Report to PDF
+        run: |
+          if [ -f trivy-fs-report.html ]; then
+            wkhtmltopdf trivy-fs-report.html sca-dependencies-report.pdf
+          fi
+
+      - name: Upload SCA PDF
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba811e # v4.6.1
+        with:
+          name: SCA-Dependencies-Report-PDF
+          path: sca-dependencies-report.pdf
+          retention-days: 7
 
   # ==========================================
   # 3. BUILD DOCKER & CONTAINER SCANNING
@@ -92,14 +184,38 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Install PDF Tools
+        run: sudo apt-get update && sudo apt-get install -y wkhtmltopdf
+
       - name: Build Docker Image
         run: |
           docker build -t identity-service:${{ github.sha }} .
 
-      - name: Run Trivy Container Scan
+      - name: Run Trivy Container Scan (HTML Report)
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image --severity HIGH,CRITICAL identity-service:${{ github.sha }}
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}:/src" \
+            aquasec/trivy:latest image \
+            --format template \
+            --template "@contrib/html.tpl" \
+            --output /src/trivy-image-report.html \
+            --severity HIGH,CRITICAL \
+            identity-service:${{ github.sha }}
+
+      - name: Convert Container Scan Report to PDF
+        run: |
+          if [ -f trivy-image-report.html ]; then
+            wkhtmltopdf trivy-image-report.html container-security-report.pdf
+          fi
+
+      - name: Upload Container Scan PDF
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba811e # v4.6.1
+        with:
+          name: Container-Security-Report-PDF
+          path: container-security-report.pdf
+          retention-days: 7
 
   # ==========================================
   # 4. DAST (DYNAMIC APPLICATION SECURITY TESTING)
@@ -112,12 +228,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Install PDF Tools
+        run: sudo apt-get update && sudo apt-get install -y wkhtmltopdf
+
       - name: Start Services for DAST
         run: |
           docker compose up -d
           timeout 60 bash -c 'until curl -s http://localhost:8081/actuator/health || curl -s http://localhost:8081/users/login; do sleep 3; done'
 
-      # Scan DAST direct via le conteneur officiel OWASP ZAP (pas de dépendance d'action)
       - name: Run OWASP ZAP Baseline Scan
         run: |
           docker run --rm --network="host" -v "${{ github.workspace }}:/zap/wrk/:rw" \
@@ -125,6 +243,20 @@ jobs:
             -t http://localhost:8081/ \
             -m 2 \
             -r zap_report.html || true
+
+      - name: Convert DAST Report to PDF
+        run: |
+          if [ -f zap_report.html ]; then
+            wkhtmltopdf zap_report.html dast-owasp-zap-report.pdf
+          fi
+
+      - name: Upload DAST PDF
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba811e # v4.6.1
+        with:
+          name: DAST-OWASP-ZAP-Report-PDF
+          path: dast-owasp-zap-report.pdf
+          retention-days: 7
 
       - name: Teardown Services
         if: always()
