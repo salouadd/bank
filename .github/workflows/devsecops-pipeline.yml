@@ -117,12 +117,14 @@ jobs:
           docker compose up -d
           timeout 60 bash -c 'until curl -s http://localhost:8081/actuator/health || curl -s http://localhost:8081/users/login; do sleep 3; done'
 
-      - name: OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@4f829f0322c342f0a14fbdd48cfabf1d431057e9 # v0.14.0
-        with:
-          target: 'http://localhost:8081/'
-          cmd_options: '-m 2'
-          fail_action: false
+      # Scan DAST direct via le conteneur officiel OWASP ZAP (pas de dépendance d'action)
+      - name: Run OWASP ZAP Baseline Scan
+        run: |
+          docker run --rm --network="host" -v "${{ github.workspace }}:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://localhost:8081/ \
+            -m 2 \
+            -r zap_report.html || true
 
       - name: Teardown Services
         if: always()
