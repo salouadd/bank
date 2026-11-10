@@ -24,6 +24,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.equals("/.well-known/jwks.json")
+                || path.startsWith("/users/login")
+                || path.startsWith("/users/register")
+                || path.startsWith("/actuator");
+    }
 
     @Override
     protected void doFilterInternal(

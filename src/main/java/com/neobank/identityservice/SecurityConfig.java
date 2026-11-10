@@ -28,14 +28,15 @@ public class SecurityConfig {
                 .cors(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Routes publiques : Inscription et Connexion
+                        // 1. Routes publiques : Inscription, Connexion, JWKS et Actuator
                         .requestMatchers(HttpMethod.POST, "/users/register", "/users/login").permitAll()
+                        .requestMatchers("/.well-known/jwks.json").permitAll() // <-- Autorise la distribution des clés publiques
                         .requestMatchers("/actuator/**").permitAll()
 
                         // 2. Routes réservées exclusivement aux administrateurs
                         .requestMatchers("/kyc/admin/**").hasRole("ADMIN")
 
-                        // 3. Toutes les autres routes (ex: /users/me, /kyc/upload, /kyc/documents) exigent une authentification
+                        // 3. Toutes les autres routes exigent une authentification
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
