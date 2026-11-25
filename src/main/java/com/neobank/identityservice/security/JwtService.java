@@ -2,10 +2,14 @@ package com.neobank.identityservice.security;
 
 import com.neobank.identityservice.model.User;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.Decoders;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
-import java.security.interfaces.RSAPrivateKey;
+import java.io.IOException;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
 import java.util.HashMap;
@@ -15,13 +19,18 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    private final RSAPrivateKey privateKey;
-    private final RSAPublicKey publicKey;
-    private final long jwtExpiration = 900000; // 15 minutes
+    private final JwtKeyProvider keyProvider;
+    private final long jwtExpiration;
+    private final String issuer;
+    private final String audience;
+    private final ObjectMapper objectMapper;
 
-    public JwtService(RSAPrivateKey privateKey, RSAPublicKey publicKey) {
-        this.privateKey = privateKey;
-        this.publicKey = publicKey;
+    public JwtService(JwtKeyProvider keyProvider, JwtKeyProperties properties, ObjectMapper objectMapper) {
+        this.keyProvider = keyProvider;
+        this.jwtExpiration = properties.getExpirationMs();
+        this.issuer = properties.getIssuer();
+        this.audience = properties.getAudience();
+        this.objectMapper = objectMapper;
     }
 
     public String generateToken(User user) {
@@ -29,16 +38,20 @@ public class JwtService {
         claims.put("userId", user.getId().toString());
         claims.put("role", user.getRole().name());
         claims.put("status", user.getStatus().name());
+        if (audience != null && !audience.isBlank()) {
+            claims.put("aud", audience);
+        }
 
         return Jwts.builder()
                 .header()
-                .keyId("neobank-auth-key-1") // Aligné avec l'identifiant du JWKS
+                .keyId(keyProvider.activeKeyId())
                 .and()
                 .claims(claims)
                 .subject(user.getEmail())
+                .issuer(issuer)
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .signWith(privateKey, Jwts.SIG.RS256) // Signature asymétrique RS256 avec la clé privée
+                .signWith(keyProvider.activePrivateKey(), Jwts.SIG.RS256)
                 .compact();
     }
 
@@ -69,8 +82,30 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
+        String[] parts = token.split("\\.", -1);
+        if (parts.length != 3) {
+            throw new JwtException("JWT compact invalide");
+        }
+
+        JsonNode header;
+        try {
+            header = objectMapper.readTree(Decoders.BASE64URL.decode(parts[0]));
+        } catch (IOException | IllegalArgumentException exception) {
+            throw new JwtException("En-tête JWT invalide", exception);
+        }
+        if (!"RS256".equals(header.path("alg").asText())) {
+            throw new JwtException("Algorithme JWT non pris en charge");
+        }
+        String keyId = header.path("kid").asText();
+        RSAPublicKey verificationKey = keyProvider.verificationKeys().get(keyId);
+        if (verificationKey == null) {
+            throw new JwtException("Clé JWT inconnue");
+        }
+
         return Jwts.parser()
-                .verifyWith(publicKey) // Vérification via la clé publique
+                .verifyWith(verificationKey)
+                .requireIssuer(issuer)
+                .requireAudience(audience)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();

@@ -5,3 +5,10 @@ target/
 .git/
 .gitignore
 uploads/
+*.pem
+*.key
+.env
+.env.*
+README*
+HELP.md
+docs/

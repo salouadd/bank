@@ -1,30 +1,66 @@
 server:
   port: 8081
+  shutdown: graceful
+  tomcat:
+    connection-timeout: 5s
+    max-connections: 200
+    threads:
+      max: 100
+      min-spare: 10
 spring:
+  profiles:
+    default: local
   application:
     name: identity-service
-    security:
-      jwt:
-        # Clé secrète de 256 bits minimum encodée en hexadécimal/base64 pour l'algorithme HS256
-        secret-key: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
-        expiration-ms: 900000 # 15 minutes (en millisecondes)
-
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/identity_db}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:password}
-    driver-class-name: org.postgresql.Driver
-
   jpa:
     hibernate:
-      ddl-auto: validate # Hibernate valide la cohérence du schéma mais ne le modifie pas
-    show-sql: true
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
 
-    flyway:
-      enabled: true
-      locations: classpath:db/migration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
 
+identity:
+  jwt:
+    active-key-id: ${IDENTITY_JWT_ACTIVE_KEY_ID:neobank-auth-key-1}
+    issuer: ${IDENTITY_JWT_ISSUER:identity-service}
+    audience: ${IDENTITY_JWT_AUDIENCE:financial-coach-service}
+    expiration-ms: ${IDENTITY_JWT_EXPIRATION_MS:900000}
+    private-key-location: ${IDENTITY_JWT_PRIVATE_KEY_LOCATION:}
+    public-key-location: ${IDENTITY_JWT_PUBLIC_KEY_LOCATION:}
+    allow-ephemeral-keys: ${IDENTITY_JWT_ALLOW_EPHEMERAL_KEYS:true}
+    verification-keys: {}
+  kyc:
+    storage-root: ${IDENTITY_KYC_STORAGE_ROOT:uploads/kyc}
+    max-file-bytes: ${IDENTITY_KYC_MAX_FILE_BYTES:10485760}
+    storage-provider: ${IDENTITY_KYC_STORAGE_PROVIDER:local}
 
+logging:
+  pattern:
+    level: "%5p [corr:%X{correlationId:-none}]"

@@ -1,10 +1,14 @@
 package com.neobank.identityservice.controller;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.neobank.identityservice.security.JwtKeyProvider;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigInteger;
 import java.security.interfaces.RSAPublicKey;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -12,28 +16,37 @@ import java.util.Map;
 @RestController
 public class JwksController {
 
-    private final RSAPublicKey publicKey;
+    private final JwtKeyProvider keyProvider;
 
-    // Injection de votre clé publique RSA configurée dans identity-service
-    public JwksController(RSAPublicKey publicKey) {
-        this.publicKey = publicKey;
+    public JwksController(JwtKeyProvider keyProvider) {
+        this.keyProvider = keyProvider;
     }
 
     @GetMapping("/.well-known/jwks.json")
-    public Map<String, Object> getJwks() {
-        // Encodage base64url du modulus (n) et de l'exposant public (e)
-        String n = Base64.getUrlEncoder().withoutPadding().encodeToString(publicKey.getModulus().toByteArray());
-        String e = Base64.getUrlEncoder().withoutPadding().encodeToString(publicKey.getPublicExponent().toByteArray());
+    public ResponseEntity<Map<String, Object>> getJwks() {
+        List<Map<String, Object>> keys = keyProvider.verificationKeys().entrySet().stream()
+                .map(entry -> jwk(entry.getKey(), entry.getValue()))
+                .toList();
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(java.time.Duration.ofMinutes(5)).cachePublic())
+                .body(Map.of("keys", keys));
+    }
 
-        Map<String, Object> keyMap = Map.of(
+    private Map<String, Object> jwk(String keyId, RSAPublicKey publicKey) {
+        return Map.of(
                 "kty", "RSA",
                 "use", "sig",
                 "alg", "RS256",
-                "kid", "neobank-auth-key-1",
-                "n", n,
-                "e", e
+                "kid", keyId,
+                "n", encodeUnsigned(publicKey.getModulus()),
+                "e", encodeUnsigned(publicKey.getPublicExponent())
         );
+    }
 
-        return Map.of("keys", List.of(keyMap));
+    private String encodeUnsigned(BigInteger value) {
+        byte[] bytes = value.toByteArray();
+        int offset = bytes.length > 1 && bytes[0] == 0 ? 1 : 0;
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(Arrays.copyOfRange(bytes, offset, bytes.length));
     }
 }

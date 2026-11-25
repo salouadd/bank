@@ -1,0 +1,98 @@
+services:
+  postgres-db:
+    image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE to a pinned PostgreSQL image}
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: identity_app
+      POSTGRES_PASSWORD_FILE: /run/secrets/identity_db_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      - identity_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - identity_backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity_app -d identity_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 1m
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      placement:
+        constraints:
+          - node.labels.identity-data == true
+
+  identity-service:
+    image: ${IDENTITY_IMAGE:?Publish the Identity image and set IDENTITY_IMAGE to its immutable tag or digest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/identity_db
+      SPRING_DATASOURCE_USERNAME: identity_app
+      IDENTITY_JWT_ACTIVE_KEY_ID: ${IDENTITY_JWT_ACTIVE_KEY_ID:?Set the active JWT key ID}
+      IDENTITY_JWT_ISSUER: ${IDENTITY_JWT_ISSUER:-identity-service}
+      IDENTITY_JWT_AUDIENCE: ${IDENTITY_JWT_AUDIENCE:?Set IDENTITY_JWT_AUDIENCE to the Financial Coach audience}
+      IDENTITY_JWT_PRIVATE_KEY_LOCATION: file:/run/secrets/identity_jwt_private_key
+      IDENTITY_JWT_PUBLIC_KEY_LOCATION: file:/run/secrets/identity_jwt_public_key
+      IDENTITY_KYC_STORAGE_PROVIDER: local
+      IDENTITY_KYC_STORAGE_ROOT: /app/uploads/kyc
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - 'export SPRING_DATASOURCE_PASSWORD="$$(cat /run/secrets/identity_db_password)"; exec java -Djava.io.tmpdir=/tmp/app -XX:MaxRAMPercentage=75.0 -jar app.jar'
+    secrets:
+      - identity_db_password
+      - identity_jwt_private_key
+      - identity_jwt_public_key
+    volumes:
+      - kyc_data:/app/uploads/kyc
+    networks:
+      identity_backend:
+      gateway:
+        aliases:
+          - identity-service
+    read_only: true
+    tmpfs:
+      - /tmp/app:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      update_config:
+        order: stop-first
+        failure_action: rollback
+      rollback_config:
+        order: stop-first
+      placement:
+        constraints:
+          - node.labels.identity-data == true
+
+volumes:
+  postgres_data:
+  kyc_data:
+
+networks:
+  identity_backend:
+    driver: overlay
+    internal: true
+  gateway:
+    external: true
+    name: ${GATEWAY_OVERLAY_NETWORK:?Set GATEWAY_OVERLAY_NETWORK to the existing Gateway overlay network}
+
+secrets:
+  identity_db_password:
+    external: true
+  identity_jwt_private_key:
+    external: true
+  identity_jwt_public_key:
+    external: true

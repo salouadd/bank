@@ -20,8 +20,7 @@ public class KycDocumentResponse {
     private UUID id;
     private UUID userId;
     private DocumentType documentType;
-    private String documentNumber;
-    private String fileUrl;
+    private String documentNumberMasked;
     private KycStatus verificationStatus;
     private OffsetDateTime submittedAt;
 }

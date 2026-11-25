@@ -10,6 +10,9 @@ import com.neobank.identityservice.repository.ProfileRepository;
 import com.neobank.identityservice.service.AuthService;
 import com.neobank.identityservice.service.UserService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
+@Tag(name = "Identité", description = "Inscription, authentification et profil utilisateur")
 public class UserController {
 
     private final UserService userService;
@@ -30,18 +34,23 @@ public class UserController {
     private final ProfileRepository profileRepository;
 
     @PostMapping("/register")
+    @Operation(summary = "Créer un compte",
+            description = "Route publique. Le compte est créé avec le rôle USER et le statut PENDING_KYC.")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
         UserResponse response = userService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Ouvrir une session",
+            description = "Route publique. Retourne un JWT Bearer à courte durée de vie; les identifiants invalides renvoient 401.")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.authenticate(request);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/me")
+    @Operation(summary = "Lire son profil", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<UserResponse> getCurrentUser(
             @AuthenticationPrincipal User user
     ) {

@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${SPRING_DATASOURCE_MAXIMUM_POOL_SIZE:20}
+      minimum-idle: ${SPRING_DATASOURCE_MINIMUM_IDLE:5}
+      connection-timeout: 5000
+      validation-timeout: 3000
+      initialization-fail-timeout: 1
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+identity:
+  jwt:
+    allow-ephemeral-keys: false
+    active-key-id: ${IDENTITY_JWT_ACTIVE_KEY_ID}
+    issuer: ${IDENTITY_JWT_ISSUER}
+    audience: ${IDENTITY_JWT_AUDIENCE}
+    expiration-ms: ${IDENTITY_JWT_EXPIRATION_MS:900000}
+    private-key-location: ${IDENTITY_JWT_PRIVATE_KEY_LOCATION}
+    public-key-location: ${IDENTITY_JWT_PUBLIC_KEY_LOCATION}
+  kyc:
+    storage-provider: ${IDENTITY_KYC_STORAGE_PROVIDER}
+    storage-root: ${IDENTITY_KYC_STORAGE_ROOT}
+    max-file-bytes: ${IDENTITY_KYC_MAX_FILE_BYTES:10485760}
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: OFF
+    org.springframework.security: WARN

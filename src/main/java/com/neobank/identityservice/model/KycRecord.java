@@ -32,9 +32,11 @@ public class KycRecord {
     @Column(name = "document_number", nullable = false, length = 100)
     private String documentNumber;
 
-    // Colonne synchronisée avec la migration V2
-    @Column(name = "file_url", nullable = false, length = 500)
-    private String fileUrl;
+    @Column(name = "storage_key", nullable = false, length = 100)
+    private String storageKey;
+
+    @Column(name = "content_type", nullable = false, length = 100)
+    private String contentType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "verification_status", nullable = false, length = 20)

@@ -1,32 +1,18 @@
 package com.neobank.identityservice.config;
 
+import com.neobank.identityservice.security.JwtKeyProperties;
+import com.neobank.identityservice.security.JwtKeyProvider;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
+import org.springframework.core.io.ResourceLoader;
 
 @Configuration
+@EnableConfigurationProperties(JwtKeyProperties.class)
 public class RsaKeyConfig {
 
-    private final KeyPair keyPair;
-
-    public RsaKeyConfig() throws NoSuchAlgorithmException {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
-        this.keyPair = generator.generateKeyPair();
-    }
-
     @Bean
-    public RSAPublicKey rsaPublicKey() {
-        return (RSAPublicKey) keyPair.getPublic();
-    }
-
-    @Bean
-    public RSAPrivateKey rsaPrivateKey() {
-        return (RSAPrivateKey) keyPair.getPrivate();
+    public JwtKeyProvider jwtKeyProvider(JwtKeyProperties properties, ResourceLoader resourceLoader) {
+        return new JwtKeyProvider(properties, resourceLoader);
     }
 }
