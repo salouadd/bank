@@ -1,0 +1,49 @@
+services:
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: identity-browser-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:?Define LOCAL_POSTGRES_PASSWORD before starting Compose}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d identity_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: identity-browser-service
+    restart: always
+    ports:
+      - "127.0.0.1:18081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/identity_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:?Define LOCAL_POSTGRES_PASSWORD before starting Compose}
+      IDENTITY_JWT_ISSUER: ${IDENTITY_JWT_ISSUER:-identity-service}
+      IDENTITY_JWT_AUDIENCE: ${IDENTITY_JWT_AUDIENCE:-financial-coach-service}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    volumes:
+      - kyc_data:/app/uploads
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres_data:
+  kyc_data:
